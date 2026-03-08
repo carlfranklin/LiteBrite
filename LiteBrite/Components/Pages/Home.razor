@@ -2,7 +2,7 @@
 @using System.Text.Json
 @inject LiteBriteState State
 @inject IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Lite Brite</PageTitle>
 
@@ -61,13 +61,15 @@ else
                 <div class="col-legend" style="grid-template-columns: repeat(@_cols, 1fr);">
                     @for (int c = 0; c < _cols; c++)
                     {
-                        <span class="legend-num">@(c + 1)</span>
+                        int col = c;
+                        <span class="legend-num @(col == _selectedCol ? "selected" : "")">@(col + 1)</span>
                     }
                 </div>
                 <div class="row-legend" style="grid-template-rows: repeat(@_rows, 1fr);">
                     @for (int r = 0; r < _rows; r++)
                     {
-                        <span class="legend-num">@(r + 1)</span>
+                        int row = r;
+                        <span class="legend-num @(row == _selectedRow ? "selected" : "")">@(row + 1)</span>
                     }
                 </div>
                 <div class="lb-grid" style="grid-template-columns: repeat(@_cols, 1fr); grid-template-rows: repeat(@_rows, 1fr);">
@@ -78,9 +80,11 @@ else
                         {
                             int col = c;
                             string? cellValue = _grid[row, col];
-                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "")"
+                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "")"
                                  style="@GetCellStyle(cellValue)"
-                                 @onclick="() => PaintCell(row, col)">
+                                 @onclick="() => PaintCell(row, col)"
+                                 @oncontextmenu="(e) => ShowContextMenu(row, col, e)"
+                                 @oncontextmenu:preventDefault="true">
                             </div>
                         }
                     }
@@ -96,6 +100,31 @@ else
                 </span>
             }
         </div>
+    </div>
+}
+
+@* ── Cell context menu ── *@
+@if (_contextVisible)
+{
+    <div class="ctx-backdrop" @onclick="HideContextMenu"></div>
+    <div class="ctx-menu" style="left:@(_contextX.ToString("F0"))px; top:@(_contextY.ToString("F0"))px;">
+        <div class="ctx-section-label">Row @(_selectedRow!.Value + 1)</div>
+        <button class="ctx-item" @onclick="() => { InsertRowAboveSelected(); HideContextMenu(); }"
+                title="Ctrl+↑">↑ Insert Row Above</button>
+        <button class="ctx-item" @onclick="() => { InsertRowBelowSelected(); HideContextMenu(); }"
+                title="Ctrl+↓">↓ Insert Row Below</button>
+        <button class="ctx-item ctx-item-danger" @onclick="() => { DeleteSelectedRow(); HideContextMenu(); }"
+                title="Delete" disabled="@(_rows <= 2)">✕ Delete Row</button>
+        <div class="ctx-divider"></div>
+        <div class="ctx-section-label">Column @(_selectedCol!.Value + 1)</div>
+        <button class="ctx-item" @onclick="() => { InsertColLeftSelected(); HideContextMenu(); }"
+                title="Ctrl+←">← Insert Column Left</button>
+        <button class="ctx-item" @onclick="() => { InsertColRightSelected(); HideContextMenu(); }"
+                title="Ctrl+→">→ Insert Column Right</button>
+        <button class="ctx-item ctx-item-danger" @onclick="() => { DeleteSelectedCol(); HideContextMenu(); }"
+                title="" disabled="@(_cols <= 2)">✕ Delete Column</button>
+        <div class="ctx-divider"></div>
+        <button class="ctx-item ctx-item-cancel" @onclick="HideContextMenu">Cancel</button>
     </div>
 }
 
@@ -242,6 +271,17 @@ else
     private string?[,] _grid = new string?[0, 0];
     private readonly Stack<string?[,]> _undoStack = new();
 
+    // Row/column selection (set by right-click; persists for keyboard shortcuts)
+    private int? _selectedRow;
+    private int? _selectedCol;
+
+    // Context menu
+    private bool _contextVisible;
+    private double _contextX;
+    private double _contextY;
+
+    private DotNetObjectReference<Home>? _dotNetRef;
+
     // Toast
     private bool _toastVisible;
     private string _toastMessage = "";
@@ -283,6 +323,9 @@ else
 
             if (int.TryParse(savedRows, out int r) && r >= 2) _inputRows = r;
             if (int.TryParse(savedCols, out int c) && c >= 2) _inputCols = c;
+
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("liteBrite.registerGridKeys", _dotNetRef);
 
             StateHasChanged();
         }
@@ -408,6 +451,149 @@ else
     {
         _isResizing = false;
         _gridReady = true;
+    }
+
+    // ── Row / Column selection ────────────────────────────────────────────────
+
+    private void ShowContextMenu(int row, int col, MouseEventArgs e)
+    {
+        _selectedRow = row;
+        _selectedCol = col;
+        _contextX = e.ClientX;
+        _contextY = e.ClientY;
+        _contextVisible = true;
+    }
+
+    private void HideContextMenu()
+    {
+        _contextVisible = false;
+        // selection stays set so keyboard shortcuts keep working
+    }
+
+    // ── Row / Column insert & delete ──────────────────────────────────────────
+
+    private void InsertRowAt(int atRow)
+    {
+        if (_rows >= 80) return;
+        var ng = new string?[_rows + 1, _cols];
+        for (int r = 0; r < atRow; r++)
+            for (int c = 0; c < _cols; c++) ng[r, c] = _grid[r, c];
+        for (int r = atRow; r < _rows; r++)
+            for (int c = 0; c < _cols; c++) ng[r + 1, c] = _grid[r, c];
+        _rows++;
+        _grid = ng;
+    }
+
+    private void DeleteRowAt(int atRow)
+    {
+        if (_rows <= 2) return;
+        var ng = new string?[_rows - 1, _cols];
+        for (int r = 0; r < atRow; r++)
+            for (int c = 0; c < _cols; c++) ng[r, c] = _grid[r, c];
+        for (int r = atRow + 1; r < _rows; r++)
+            for (int c = 0; c < _cols; c++) ng[r - 1, c] = _grid[r, c];
+        _rows--;
+        _grid = ng;
+    }
+
+    private void InsertColAt(int atCol)
+    {
+        if (_cols >= 120) return;
+        var ng = new string?[_rows, _cols + 1];
+        for (int r = 0; r < _rows; r++)
+        {
+            for (int c = 0; c < atCol; c++) ng[r, c] = _grid[r, c];
+            for (int c = atCol; c < _cols; c++) ng[r, c + 1] = _grid[r, c];
+        }
+        _cols++;
+        _grid = ng;
+    }
+
+    private void DeleteColAt(int atCol)
+    {
+        if (_cols <= 2) return;
+        var ng = new string?[_rows, _cols - 1];
+        for (int r = 0; r < _rows; r++)
+        {
+            for (int c = 0; c < atCol; c++) ng[r, c] = _grid[r, c];
+            for (int c = atCol + 1; c < _cols; c++) ng[r, c - 1] = _grid[r, c];
+        }
+        _cols--;
+        _grid = ng;
+    }
+
+    // Toolbar button handlers
+
+    private void InsertRowAboveSelected()
+    {
+        if (!_selectedRow.HasValue) return;
+        PushUndo();
+        InsertRowAt(_selectedRow.Value);
+        // selection index stays the same (the new blank row is now at _selectedRow)
+    }
+
+    private void InsertRowBelowSelected()
+    {
+        if (!_selectedRow.HasValue) return;
+        PushUndo();
+        InsertRowAt(_selectedRow.Value + 1);
+        _selectedRow = _selectedRow.Value + 1;
+    }
+
+    private void DeleteSelectedRow()
+    {
+        if (!_selectedRow.HasValue || _rows <= 2) return;
+        PushUndo();
+        DeleteRowAt(_selectedRow.Value);
+        _selectedRow = null;
+    }
+
+    private void InsertColLeftSelected()
+    {
+        if (!_selectedCol.HasValue) return;
+        PushUndo();
+        InsertColAt(_selectedCol.Value);
+    }
+
+    private void InsertColRightSelected()
+    {
+        if (!_selectedCol.HasValue) return;
+        PushUndo();
+        InsertColAt(_selectedCol.Value + 1);
+        _selectedCol = _selectedCol.Value + 1;
+    }
+
+    private void DeleteSelectedCol()
+    {
+        if (!_selectedCol.HasValue || _cols <= 2) return;
+        PushUndo();
+        DeleteColAt(_selectedCol.Value);
+        _selectedCol = null;
+    }
+
+    [JSInvokable]
+    public void OnGridKeyDown(string key, bool ctrl)
+    {
+        bool acted = false;
+
+        if (_selectedRow.HasValue)
+        {
+            int r = _selectedRow.Value;
+            if (ctrl && key == "ArrowUp")   { PushUndo(); InsertRowAt(r);     acted = true; }
+            if (ctrl && key == "ArrowDown") { PushUndo(); InsertRowAt(r + 1); _selectedRow = r + 1; acted = true; }
+            if (!ctrl && key == "Delete")   { PushUndo(); DeleteRowAt(r); _selectedRow = null; acted = true; }
+        }
+
+        if (_selectedCol.HasValue)
+        {
+            int c = _selectedCol.Value;
+            if (ctrl && key == "ArrowLeft")  { PushUndo(); InsertColAt(c);     acted = true; }
+            if (ctrl && key == "ArrowRight") { PushUndo(); InsertColAt(c + 1); _selectedCol = c + 1; acted = true; }
+        }
+
+        if (key == "Escape") { _selectedRow = null; _selectedCol = null; _contextVisible = false; acted = true; }
+
+        if (acted) StateHasChanged();
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
@@ -600,9 +786,16 @@ else
         await JS.InvokeVoidAsync("liteBrite.printWithTitle", title);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         State.OnChanged -= OnStateChanged;
+        _dotNetRef?.Dispose();
+        try
+        {
+            await JS.InvokeVoidAsync("liteBrite.unregisterGridKeys");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
     }
 }
 
