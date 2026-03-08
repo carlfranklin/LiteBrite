@@ -9,8 +9,8 @@
 @if (!_gridReady)
 {
     <div class="setup-panel">
-        <h2 class="setup-title">🔆 Kelly Squares Setup</h2>
-        <p class="setup-subtitle">Start a new grid or load an existing design.</p>
+        <h2 class="setup-title">@(_isResizing ? "✏️ Change Grid Size" : "🔆 Kelly Squares Setup")</h2>
+        <p class="setup-subtitle">@(_isResizing ? $"Current size: {_rows} × {_cols}. Existing content will be preserved." : "Start a new grid or load an existing design.")</p>
         <div class="setup-form">
             <div class="setup-field">
                 <label for="rowsInput">Rows</label>
@@ -20,9 +20,17 @@
                 <label for="colsInput">Columns</label>
                 <input id="colsInput" type="number" min="2" max="120" @bind="_inputCols" />
             </div>
-            <button class="btn btn-primary btn-sm btn-start" @onclick="StartGrid">New Grid</button>
-            <button class="btn btn-secondary btn-sm" @onclick="OpenLoadModal">📂 Load…</button>
-            <button class="btn btn-secondary btn-sm" @onclick="OpenManageModal">⚙️ Manage…</button>
+            @if (_isResizing)
+            {
+                <button class="btn btn-primary btn-sm btn-start" @onclick="ResizeGrid">Resize Grid</button>
+                <button class="btn btn-secondary btn-sm" @onclick="CancelResize">Cancel</button>
+            }
+            else
+            {
+                <button class="btn btn-primary btn-sm btn-start" @onclick="StartGrid">New Grid</button>
+                <button class="btn btn-secondary btn-sm" @onclick="OpenLoadModal">📂 Load…</button>
+                <button class="btn btn-secondary btn-sm" @onclick="OpenManageModal">⚙️ Manage…</button>
+            }
         </div>
     </div>
 }
@@ -226,6 +234,7 @@ else
 
 @code {
     private bool _gridReady;
+    private bool _isResizing;
     private int _rows;
     private int _cols;
     private int _inputRows = 20;
@@ -368,10 +377,37 @@ else
 
     private void ResetGrid()
     {
+        _inputRows = _rows;
+        _inputCols = _cols;
+        _isResizing = true;
         _gridReady = false;
-        _grid = new string?[0, 0];
+    }
+
+    private async Task ResizeGrid()
+    {
+        var newRows = Math.Clamp(_inputRows, 2, 80);
+        var newCols = Math.Clamp(_inputCols, 2, 120);
+        var newGrid = new string?[newRows, newCols];
+
+        for (int r = 0; r < Math.Min(_rows, newRows); r++)
+            for (int c = 0; c < Math.Min(_cols, newCols); c++)
+                newGrid[r, c] = _grid[r, c];
+
+        _rows = newRows;
+        _cols = newCols;
+        _grid = newGrid;
         _undoStack.Clear();
-        _loadedSave = null;
+        _isResizing = false;
+        _gridReady = true;
+
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-rows", _rows.ToString());
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-cols", _cols.ToString());
+    }
+
+    private void CancelResize()
+    {
+        _isResizing = false;
+        _gridReady = true;
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
