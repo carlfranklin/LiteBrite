@@ -99,6 +99,18 @@ else
                     @color.Name (@count)
                 </span>
             }
+            @if (State.Squares.Count > 0)
+            {
+                <span class="color-legend-sep"></span>
+                @foreach (var (square, count) in GetSquareCounts())
+                {
+                    <span class="color-legend-item @(count == 0 ? "color-legend-dim" : "")">
+                        <span class="color-legend-dot color-legend-stamp"
+                              style="background-image: url('@GetSquareDataUrl(square)');"></span>
+                        @square.Name (@count)
+                    </span>
+                }
+            }
         </div>
     </div>
 }
@@ -410,14 +422,19 @@ else
             var id = cellValue[6..];
             var square = State.Squares.FirstOrDefault(s => s.Id == id);
             if (square == null) return "";
-            if (!_svgCache.TryGetValue(id, out var url))
-                _svgCache[id] = url = SvgHelper.ToDataUrl(square);
-            return $"background-image: url('{url}'); background-size: cover; background-position: center;";
+            return $"background-image: url('{GetSquareDataUrl(square)}'); background-size: cover; background-position: center;";
         }
         return $"background-color:{cellValue}; box-shadow: 0 0 8px 2px {cellValue}, 0 0 2px 1px {cellValue};";
     }
 
     private static bool IsCellLit(string? cellValue) => cellValue != null;
+
+    private string GetSquareDataUrl(SaveEntry square)
+    {
+        if (!_svgCache.TryGetValue(square.Id, out var url))
+            _svgCache[square.Id] = url = SvgHelper.ToDataUrl(square);
+        return url;
+    }
 
     private IEnumerable<(ColorEntry color, int count)> GetColorCounts()
     {
@@ -430,6 +447,22 @@ else
                     counts[v]++;
             }
         return State.Colors.Select(c => (c, counts.TryGetValue(c.Hex, out var n) ? n : 0));
+    }
+
+    private IEnumerable<(SaveEntry square, int count)> GetSquareCounts()
+    {
+        var counts = State.Squares.ToDictionary(s => s.Id, _ => 0);
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+            {
+                var v = _grid[r, c];
+                if (v != null && v.StartsWith("stamp:"))
+                {
+                    var id = v[6..];
+                    if (counts.ContainsKey(id)) counts[id]++;
+                }
+            }
+        return State.Squares.Select(s => (s, counts.TryGetValue(s.Id, out var n) ? n : 0));
     }
 
     private void ClearGrid()

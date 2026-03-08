@@ -614,3 +614,17 @@
     flex-shrink: 0;
     display: inline-block;
 }
+
+.color-legend-stamp {
+    border-radius: 2px;
+    background-size: cover;
+    background-position: center;
+}
+
+.color-legend-sep {
+    width: 1px;
+    background: #333;
+    align-self: stretch;
+    flex-shrink: 0;
+    margin: 0 0.25rem;
+}
