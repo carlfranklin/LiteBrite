@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36" shape-rendering="crispEdges">
+  <!-- Row 0: R O Y G B V -->
+  <rect x="0"  y="0"  width="6" height="6" fill="#ff2020"/>
+  <rect x="6"  y="0"  width="6" height="6" fill="#ff8c00"/>
+  <rect x="12" y="0"  width="6" height="6" fill="#ffff00"/>
+  <rect x="18" y="0"  width="6" height="6" fill="#00ff44"/>
+  <rect x="24" y="0"  width="6" height="6" fill="#00aaff"/>
+  <rect x="30" y="0"  width="6" height="6" fill="#cc00ff"/>
+  <!-- Row 1: O Y G B V R -->
+  <rect x="0"  y="6"  width="6" height="6" fill="#ff8c00"/>
+  <rect x="6"  y="6"  width="6" height="6" fill="#ffff00"/>
+  <rect x="12" y="6"  width="6" height="6" fill="#00ff44"/>
+  <rect x="18" y="6"  width="6" height="6" fill="#00aaff"/>
+  <rect x="24" y="6"  width="6" height="6" fill="#cc00ff"/>
+  <rect x="30" y="6"  width="6" height="6" fill="#ff2020"/>
+  <!-- Row 2: Y G B V R O -->
+  <rect x="0"  y="12" width="6" height="6" fill="#ffff00"/>
+  <rect x="6"  y="12" width="6" height="6" fill="#00ff44"/>
+  <rect x="12" y="12" width="6" height="6" fill="#00aaff"/>
+  <rect x="18" y="12" width="6" height="6" fill="#cc00ff"/>
+  <rect x="24" y="12" width="6" height="6" fill="#ff2020"/>
+  <rect x="30" y="12" width="6" height="6" fill="#ff8c00"/>
+  <!-- Row 3: G B V R O Y -->
+  <rect x="0"  y="18" width="6" height="6" fill="#00ff44"/>
+  <rect x="6"  y="18" width="6" height="6" fill="#00aaff"/>
+  <rect x="12" y="18" width="6" height="6" fill="#cc00ff"/>
+  <rect x="18" y="18" width="6" height="6" fill="#ff2020"/>
+  <rect x="24" y="18" width="6" height="6" fill="#ff8c00"/>
+  <rect x="30" y="18" width="6" height="6" fill="#ffff00"/>
+  <!-- Row 4: B V R O Y G -->
+  <rect x="0"  y="24" width="6" height="6" fill="#00aaff"/>
+  <rect x="6"  y="24" width="6" height="6" fill="#cc00ff"/>
+  <rect x="12" y="24" width="6" height="6" fill="#ff2020"/>
+  <rect x="18" y="24" width="6" height="6" fill="#ff8c00"/>
+  <rect x="24" y="24" width="6" height="6" fill="#ffff00"/>
+  <rect x="30" y="24" width="6" height="6" fill="#00ff44"/>
+  <!-- Row 5: V R O Y G B -->
+  <rect x="0"  y="30" width="6" height="6" fill="#cc00ff"/>
+  <rect x="6"  y="30" width="6" height="6" fill="#ff2020"/>
+  <rect x="12" y="30" width="6" height="6" fill="#ff8c00"/>
+  <rect x="18" y="30" width="6" height="6" fill="#ffff00"/>
+  <rect x="24" y="30" width="6" height="6" fill="#00ff44"/>
+  <rect x="30" y="30" width="6" height="6" fill="#00aaff"/>
+</svg>
