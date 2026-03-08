@@ -80,9 +80,9 @@ else
                         {
                             int col = c;
                             string? cellValue = _grid[row, col];
-                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "")"
+                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "") @(row == _anchorRow && col == _anchorCol ? "anchor-cell" : "")"
                                  style="@GetCellStyle(cellValue)"
-                                 @onclick="() => PaintCell(row, col)"
+                                 @onclick="(e) => PaintCell(row, col, e.ShiftKey)"
                                  @oncontextmenu="(e) => ShowContextMenu(row, col, e)"
                                  @oncontextmenu:preventDefault="true">
                             </div>
@@ -275,6 +275,10 @@ else
     private int? _selectedRow;
     private int? _selectedCol;
 
+    // Shift-click fill anchor
+    private int? _anchorRow;
+    private int? _anchorCol;
+
     // Context menu
     private bool _contextVisible;
     private double _contextX;
@@ -353,17 +357,34 @@ else
         await JS.InvokeVoidAsync("liteBrite.setItem", "lb-cols", _cols.ToString());
     }
 
-    private void PaintCell(int row, int col)
+    private void PaintCell(int row, int col, bool shift = false)
     {
-        PushUndo();
-        if (State.IsStampMode && State.SelectedSquare != null)
+        if (shift && _anchorRow.HasValue && _anchorCol.HasValue && !State.IsStampMode)
         {
-            var stampVal = $"stamp:{State.SelectedSquare.Id}";
-            _grid[row, col] = _grid[row, col] == stampVal ? null : stampVal;
+            // Shift-click: fill rectangle from anchor to this cell
+            PushUndo();
+            int r0 = Math.Min(_anchorRow.Value, row), r1 = Math.Max(_anchorRow.Value, row);
+            int c0 = Math.Min(_anchorCol.Value, col), c1 = Math.Max(_anchorCol.Value, col);
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                    _grid[r, c] = State.SelectedColor;
+            _anchorRow = row;
+            _anchorCol = col;
         }
         else
         {
-            _grid[row, col] = _grid[row, col] == State.SelectedColor ? null : State.SelectedColor;
+            PushUndo();
+            if (State.IsStampMode && State.SelectedSquare != null)
+            {
+                var stampVal = $"stamp:{State.SelectedSquare.Id}";
+                _grid[row, col] = _grid[row, col] == stampVal ? null : stampVal;
+            }
+            else
+            {
+                _grid[row, col] = _grid[row, col] == State.SelectedColor ? null : State.SelectedColor;
+            }
+            _anchorRow = row;
+            _anchorCol = col;
         }
     }
 
@@ -416,6 +437,8 @@ else
         _grid = new string?[_rows, _cols];
         _undoStack.Clear();
         _loadedSave = null;
+        _anchorRow = null;
+        _anchorCol = null;
     }
 
     private void ResetGrid()
@@ -440,6 +463,8 @@ else
         _cols = newCols;
         _grid = newGrid;
         _undoStack.Clear();
+        _anchorRow = null;
+        _anchorCol = null;
         _isResizing = false;
         _gridReady = true;
 
@@ -683,6 +708,8 @@ else
         _loadedSave = save;
         _gridReady = true;
         _undoStack.Clear();
+        _anchorRow = null;
+        _anchorCol = null;
         _loadModalVisible = false;
     }
 

@@ -514,6 +514,10 @@
     border-color: rgba(255, 204, 0, 0.4) !important;
 }
 
+.lb-cell.anchor-cell {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55) !important;
+}
+
 /* Row / column context menu */
 .ctx-backdrop {
     position: fixed;
