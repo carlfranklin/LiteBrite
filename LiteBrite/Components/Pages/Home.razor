@@ -44,6 +44,8 @@ else
                     disabled="@(_loadedSave == null)">🔄 Update</button>
             <button class="btn btn-primary btn-sm" @onclick="OpenLoadModal">📂 Load…</button>
             <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">⚙️ Manage…</button>
+            <div class="toolbar-sep"></div>
+            <button class="btn btn-secondary btn-sm" @onclick="PrintGrid">🖨️ Print</button>
         </div>
         <div class="grid-wrapper">
             <div class="grid-area" style="--cols: @_cols; --rows: @_rows;">
@@ -552,6 +554,14 @@ else
     {
         var json = JsonSerializer.Serialize(_saves, _jsonOpts);
         await JS.InvokeVoidAsync("liteBrite.setItem", "lb-saves", json);
+    }
+
+    private async Task PrintGrid()
+    {
+        var title = _loadedSave != null
+            ? $"{_loadedSave.Name} ({_loadedSave.Type.ToLower()})"
+            : "Untitled";
+        await JS.InvokeVoidAsync("liteBrite.printWithTitle", title);
     }
 
     public void Dispose()

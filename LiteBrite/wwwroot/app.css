@@ -60,3 +60,88 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+@media print {
+    /* Force background colors and images to print */
+    *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Hide the sidebar/navbar and the toolbar buttons */
+    .sidebar,
+    .grid-toolbar {
+        display: none !important;
+    }
+
+    /* Flatten the page layout so sidebar no longer takes space */
+    .page {
+        display: block !important;
+        height: auto !important;
+    }
+
+    /* White background for print */
+    html, body {
+        background: #fff !important;
+    }
+
+    /* Let main fill the page height as a flex column */
+    main {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100vh !important;
+        background-color: #fff !important;
+    }
+
+    /* Remove article padding; let it fill remaining height */
+    article {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+        padding: 0.25rem !important;
+    }
+
+    /* Grid page: fill the article vertically */
+    .lb-page {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Grid wrapper grows to fill available space */
+    .grid-wrapper {
+        flex: 1 !important;
+        min-height: 0 !important;
+        background: #fff !important;
+        border-color: #ccc !important;
+        box-shadow: none !important;
+    }
+
+    /* Color legend stays pinned at the bottom */
+    .color-legend {
+        flex-shrink: 0 !important;
+    }
+
+    /* Unlit cells become light gray; lit cells keep their inline colors */
+    .lb-cell:not(.lit) {
+        background-color: #e8e8e8 !important;
+        border-color: #d0d0d0 !important;
+    }
+
+    /* Legend numbers become readable on white */
+    .legend-num {
+        color: #555 !important;
+    }
+
+    /* Color legend text becomes dark */
+    .color-legend-item {
+        color: #111 !important;
+    }
+
+    .color-legend-item.color-legend-dim {
+        color: #999 !important;
+    }
+}
