@@ -1,0 +1,190 @@
+﻿@using System.Text.Json
+@inject LiteBriteState State
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Lite Brite</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+
+        <div class="section-header">
+            <span class="color-picker-label">Colors</span>
+            <button class="btn-icon" title="Add color" @onclick="OpenAddColorModal">
+                <Blazicon Svg="FontAwesomeSolidIcon.Plus" class="nav-icon" />
+            </button>
+        </div>
+
+        @foreach (var color in State.Colors)
+        {
+            <div class="nav-item px-3 color-row">
+                <button class="color-swatch @(!State.IsStampMode && State.SelectedColor == color.Hex ? "selected" : "")"
+                        style="background-color: @color.Hex;"
+                        title="@color.Name (@color.Hex)"
+                        @onclick="() => State.SelectColor(color.Hex)">
+                    <span class="color-name">@color.Name</span>
+                </button>
+                <button class="btn-icon btn-icon-danger"
+                        title="@(State.IsColorUsed(color.Hex) ? "In use — cannot delete" : "Delete color")"
+                        disabled="@State.IsColorUsed(color.Hex)"
+                        @onclick="() => DeleteColor(color)"
+                        @onclick:stopPropagation>
+                    <Blazicon Svg="FontAwesomeSolidIcon.TrashCan" class="nav-icon" />
+                </button>
+            </div>
+        }
+
+        @if (State.Squares.Count > 0)
+        {
+            <div class="nav-divider"></div>
+            <div class="color-picker-label">Squares</div>
+            @foreach (var sq in State.Squares)
+            {
+                <div class="nav-item px-3">
+                    <button class="square-thumb @(State.SelectedSquare?.Id == sq.Id ? "selected" : "")"
+                            title="@sq.Name"
+                            @onclick="() => State.SelectSquare(sq)">
+                        <img src="@SvgHelper.ToDataUrl(sq)" class="thumb-img" alt="@sq.Name" />
+                        <span class="color-name">@sq.Name</span>
+                    </button>
+                </div>
+            }
+        }
+
+    </nav>
+</div>
+
+@* ── Add Color Modal ── *@
+@if (_addColorVisible)
+{
+    <div class="modal-backdrop" @onclick="CloseAddColorModal">
+        <div class="modal-card" @onclick:stopPropagation>
+            <h3 class="modal-title">Add Color</h3>
+            <div class="modal-field">
+                <label>Pick a Color</label>
+                <div class="color-picker-row">
+                    <input type="color" @bind="_newColorHex" @bind:event="oninput"
+                           class="native-color-picker" title="Click to open color picker" />
+                    <span class="hex-preview">@_newColorHex</span>
+                </div>
+                <div class="color-preview-swatch" style="background-color: @_newColorHex;"></div>
+            </div>
+            <div class="modal-field">
+                <label>Name</label>
+                <input type="text" placeholder="e.g. Pink" @bind="_newColorName" @bind:event="oninput"
+                       @onkeydown="OnAddColorKeyDown" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_addColorError))
+            {
+                <p class="modal-error">@_addColorError</p>
+            }
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" @onclick="CloseAddColorModal">Cancel</button>
+                <button class="btn btn-primary btn-sm" @onclick="ExecuteAddColor">Add to Palette</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
+
+    // Add-color modal
+    private bool _addColorVisible;
+    private string _newColorHex = "#ff0000";
+    private string _newColorName = "";
+    private string _addColorError = "";
+
+    protected override void OnInitialized()
+    {
+        State.OnChanged += StateHasChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var savesJson = await JS.InvokeAsync<string?>("liteBrite.getItem", "lb-saves");
+            var allSaves = string.IsNullOrEmpty(savesJson)
+                ? new List<SaveEntry>()
+                : JsonSerializer.Deserialize<List<SaveEntry>>(savesJson, _jsonOpts) ?? [];
+            State.UpdateSaves(allSaves);
+
+            var colorsJson = await JS.InvokeAsync<string?>("liteBrite.getItem", "lb-colors");
+            List<ColorEntry> colors;
+            if (string.IsNullOrEmpty(colorsJson))
+            {
+                colors = LiteBriteState.DefaultColors();
+                await PersistColors(colors);
+            }
+            else
+            {
+                colors = JsonSerializer.Deserialize<List<ColorEntry>>(colorsJson, _jsonOpts)
+                         ?? LiteBriteState.DefaultColors();
+            }
+            State.UpdateColors(colors);
+        }
+    }
+
+    private void OpenAddColorModal()
+    {
+        _newColorHex = "#ff0000";
+        _newColorName = "";
+        _addColorError = "";
+        _addColorVisible = true;
+    }
+
+    private void CloseAddColorModal() => _addColorVisible = false;
+
+    private async Task OnAddColorKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ExecuteAddColor();
+        if (e.Key == "Escape") CloseAddColorModal();
+    }
+
+    private async Task ExecuteAddColor()
+    {
+        _newColorName = _newColorName.Trim();
+        if (string.IsNullOrEmpty(_newColorName))
+        {
+            _addColorError = "Please enter a name.";
+            return;
+        }
+        if (State.Colors.Any(c => string.Equals(c.Hex, _newColorHex, StringComparison.OrdinalIgnoreCase)))
+        {
+            _addColorError = "That color is already in the list.";
+            return;
+        }
+
+        var newList = State.Colors.Append(new ColorEntry(_newColorName, _newColorHex)).ToList();
+        State.UpdateColors(newList);
+        await PersistColors(newList);
+        _addColorVisible = false;
+    }
+
+    private async Task DeleteColor(ColorEntry color)
+    {
+        if (State.IsColorUsed(color.Hex)) return;
+        var newList = State.Colors.Where(c => c.Hex != color.Hex).ToList();
+        State.UpdateColors(newList);
+        await PersistColors(newList);
+    }
+
+    private async Task PersistColors(List<ColorEntry> colors)
+    {
+        var json = JsonSerializer.Serialize(colors, _jsonOpts);
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-colors", json);
+    }
+
+    public void Dispose()
+    {
+        State.OnChanged -= StateHasChanged;
+    }
+}
+

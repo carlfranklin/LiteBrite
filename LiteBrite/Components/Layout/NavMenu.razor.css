@@ -1,0 +1,288 @@
+.navbar-toggler {
+    appearance: none;
+    cursor: pointer;
+    width: 3.5rem;
+    height: 2.5rem;
+    color: white;
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.55%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") no-repeat center/1.75rem rgba(255, 255, 255, 0.1);
+}
+
+.navbar-toggler:checked {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.top-row {
+    min-height: 3.5rem;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.navbar-brand {
+    font-size: 1.1rem;
+}
+
+.color-picker-label {
+    color: #aaa;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 1rem 1rem 0.4rem 1rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 0.5rem;
+}
+
+.section-header .color-picker-label {
+    padding-bottom: 0.4rem;
+}
+
+.btn-icon {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: #aaa;
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-icon:hover {
+    color: white;
+    border-color: rgba(255,255,255,0.3);
+}
+
+.btn-icon:disabled {
+    color: #333;
+    cursor: not-allowed;
+    border-color: transparent;
+}
+
+.btn-icon-danger:not(:disabled):hover {
+    color: #f66;
+    border-color: #f66;
+}
+
+.nav-icon {
+    width: 0.8rem;
+    height: 0.8rem;
+}
+
+.color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.color-row .color-swatch {
+    flex: 1;
+    min-width: 0;
+}
+
+.nav-item {
+    padding-bottom: 0.35rem;
+}
+
+.color-swatch {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.45rem 0.75rem;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    gap: 0.65rem;
+}
+
+.color-swatch:hover {
+    border-color: rgba(255,255,255,0.5);
+}
+
+.color-swatch.selected {
+    border-color: white;
+    box-shadow: 0 0 8px 2px rgba(255,255,255,0.5);
+}
+
+.color-name {
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.nav-divider {
+    height: 1px;
+    background: #333;
+    margin: 0.75rem 1rem;
+}
+
+.square-thumb {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #111;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    gap: 0.6rem;
+}
+
+.square-thumb:hover {
+    border-color: rgba(255,255,255,0.4);
+}
+
+.square-thumb.selected {
+    border-color: white;
+    box-shadow: 0 0 8px 2px rgba(255,255,255,0.4);
+}
+
+.thumb-img {
+    width: 38px;
+    height: 38px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+    image-rendering: pixelated;
+}
+
+.nav-scrollable {
+    display: none;
+}
+
+.navbar-toggler:checked ~ .nav-scrollable {
+    display: block;
+}
+
+@media (min-width: 641px) {
+    .navbar-toggler {
+        display: none;
+    }
+
+    .nav-scrollable {
+        display: block;
+        height: calc(100vh - 3.5rem);
+        overflow-y: auto;
+    }
+}
+
+/* ── Add Color Modal (scoped to NavMenu) ── */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-card {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 1.75rem 2rem;
+    min-width: 300px;
+    max-width: 90vw;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+.modal-title {
+    color: white;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.modal-field label {
+    color: #aaa;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.modal-field input[type="text"] {
+    background: #111;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: white;
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.modal-field input[type="text"]:focus {
+    border-color: #00aaff;
+    box-shadow: 0 0 0 2px rgba(0,170,255,0.2);
+}
+
+.modal-error {
+    color: #f66;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Color preview swatch in the modal */
+.color-preview-swatch {
+    width: 100%;
+    height: 52px;
+    border-radius: 8px;
+    border: 2px solid #555;
+    transition: background-color 0.1s;
+}
+
+.color-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.native-color-picker {
+    width: 48px;
+    height: 38px;
+    padding: 2px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #111;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.hex-preview {
+    color: white;
+    font-size: 0.95rem;
+    font-family: monospace;
+    background: #111;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+}
+

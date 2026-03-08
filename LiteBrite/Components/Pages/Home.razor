@@ -1,0 +1,563 @@
+@page "/"
+@using System.Text.Json
+@inject LiteBriteState State
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Lite Brite</PageTitle>
+
+@if (!_gridReady)
+{
+    <div class="setup-panel">
+        <h2 class="setup-title">🔆 Lite Brite Setup</h2>
+        <p class="setup-subtitle">Start a new grid or load an existing design.</p>
+        <div class="setup-form">
+            <div class="setup-field">
+                <label for="rowsInput">Rows</label>
+                <input id="rowsInput" type="number" min="2" max="80" @bind="_inputRows" />
+            </div>
+            <div class="setup-field">
+                <label for="colsInput">Columns</label>
+                <input id="colsInput" type="number" min="2" max="120" @bind="_inputCols" />
+            </div>
+            <button class="btn btn-primary btn-sm btn-start" @onclick="StartGrid">New Grid</button>
+            <button class="btn btn-secondary btn-sm" @onclick="OpenLoadModal">📂 Load…</button>
+            <button class="btn btn-secondary btn-sm" @onclick="OpenManageModal">⚙️ Manage…</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="lb-page">
+        <div class="grid-toolbar">
+            <span class="grid-title">@(_loadedSave?.Name ?? "Untitled")</span>
+            <div class="toolbar-sep"></div>
+            <button class="btn btn-primary btn-sm" @onclick="ClearGrid" title="Clear all pegs">Clear</button>
+            <button class="btn btn-primary btn-sm" @onclick="Undo"
+                    title="Undo last paint"
+                    disabled="@(_undoStack.Count == 0)">↩ Undo</button>
+            <button class="btn btn-primary btn-sm" @onclick="ResetGrid" title="Change grid size">Change Size</button>
+            <div class="toolbar-sep"></div>
+            <button class="btn btn-primary btn-sm" @onclick="OpenSaveModal">💾 Save…</button>
+            <button class="btn btn-primary btn-sm" @onclick="ExecuteUpdate"
+                    title="@(_loadedSave != null ? $"Overwrite '{_loadedSave.Name}'" : "Load a design first")"
+                    disabled="@(_loadedSave == null)">🔄 Update</button>
+            <button class="btn btn-primary btn-sm" @onclick="OpenLoadModal">📂 Load…</button>
+            <button class="btn btn-primary btn-sm" @onclick="OpenManageModal">⚙️ Manage…</button>
+        </div>
+        <div class="grid-wrapper">
+            <div class="grid-area" style="--cols: @_cols; --rows: @_rows;">
+                <div class="legend-corner"></div>
+                <div class="col-legend" style="grid-template-columns: repeat(@_cols, 1fr);">
+                    @for (int c = 0; c < _cols; c++)
+                    {
+                        <span class="legend-num">@(c + 1)</span>
+                    }
+                </div>
+                <div class="row-legend" style="grid-template-rows: repeat(@_rows, 1fr);">
+                    @for (int r = 0; r < _rows; r++)
+                    {
+                        <span class="legend-num">@(r + 1)</span>
+                    }
+                </div>
+                <div class="lb-grid" style="grid-template-columns: repeat(@_cols, 1fr); grid-template-rows: repeat(@_rows, 1fr);">
+                    @for (int r = 0; r < _rows; r++)
+                    {
+                        int row = r;
+                        @for (int c = 0; c < _cols; c++)
+                        {
+                            int col = c;
+                            string? cellValue = _grid[row, col];
+                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "")"
+                                 style="@GetCellStyle(cellValue)"
+                                 @onclick="() => PaintCell(row, col)">
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="color-legend">
+            @foreach (var (color, count) in GetColorCounts())
+            {
+                <span class="color-legend-item @(count == 0 ? "color-legend-dim" : "")">
+                    <span class="color-legend-dot" style="background:@color.Hex; box-shadow: 0 0 4px @color.Hex;"></span>
+                    @color.Name (@count)
+                </span>
+            }
+        </div>
+    </div>
+}
+
+@* ── Save Modal ── *@
+@if (_saveModalVisible)
+{
+    <div class="modal-backdrop" @onclick="CloseSaveModal">
+        <div class="modal-card" @onclick:stopPropagation>
+            <h3 class="modal-title">Save Design</h3>
+            <div class="modal-field">
+                <label>Name</label>
+                <input type="text" placeholder="Enter a name…" @bind="_saveName" @bind:event="oninput" @onkeydown="OnSaveKeyDown" />
+            </div>
+            <div class="modal-field">
+                <label>Type</label>
+                <div class="type-options">
+                    <label class="type-option @(_saveType == "Pattern" ? "selected" : "")">
+                        <input type="radio" name="saveType" value="Pattern" @onchange='() => _saveType = "Pattern"' checked="@(_saveType == "Pattern")" />
+                        🎨 Pattern
+                    </label>
+                    <label class="type-option @(_saveType == "Square" ? "selected" : "")">
+                        <input type="radio" name="saveType" value="Square" @onchange='() => _saveType = "Square"' checked="@(_saveType == "Square")" />
+                        ⬛ Square
+                    </label>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_saveError))
+            {
+                <p class="modal-error">@_saveError</p>
+            }
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" @onclick="CloseSaveModal">Cancel</button>
+                <button class="btn btn-primary btn-sm" @onclick="ExecuteSave">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Load Modal ── *@
+@if (_loadModalVisible)
+{
+    <div class="modal-backdrop" @onclick="CloseLoadModal">
+        <div class="modal-card modal-card-wide" @onclick:stopPropagation>
+            <h3 class="modal-title">Load Design</h3>
+            @if (_saves.Count == 0)
+            {
+                <p class="modal-empty">No saved designs yet.</p>
+            }
+            else
+            {
+                <div class="saves-list">
+                    @foreach (var save in _saves.OrderByDescending(s => s.SavedAt))
+                    {
+                        <div class="save-item">
+                            <div class="save-item-info">
+                                <span class="save-name">@save.Name</span>
+                                <span class="save-badge save-badge-@save.Type.ToLower()">@save.Type</span>
+                                <span class="save-meta">@save.Rows × @save.Cols</span>
+                            </div>
+                            <div class="save-item-actions">
+                                <button class="btn btn-primary btn-sm" @onclick="() => ExecuteLoad(save)">Load</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteSave(save)" title="Delete">✕</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" @onclick="CloseLoadModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Manage Modal ── *@
+@if (_manageModalVisible)
+{
+    <div class="modal-backdrop" @onclick="CloseManageModal">
+        <div class="modal-card modal-card-wide" @onclick:stopPropagation>
+            <h3 class="modal-title">Manage Designs</h3>
+            @if (_saves.Count == 0)
+            {
+                <p class="modal-empty">No saved designs yet.</p>
+            }
+            else
+            {
+                <div class="saves-list">
+                    @foreach (var save in _saves.OrderByDescending(s => s.SavedAt))
+                    {
+                        <div class="save-item">
+                            <div class="save-item-info">
+                                @if (_editingId == save.Id)
+                                {
+                                    <input class="rename-input" type="text"
+                                           @bind="_editingName" @bind:event="oninput"
+                                           @onkeydown="e => OnRenameKeyDown(e, save)"
+                                           @onclick:stopPropagation />
+                                }
+                                else
+                                {
+                                    <span class="save-name">@save.Name</span>
+                                }
+                                <span class="save-badge save-badge-@save.Type.ToLower()">@save.Type</span>
+                                <span class="save-meta">@save.Rows × @save.Cols</span>
+                            </div>
+                            <div class="save-item-actions">
+                                @if (_editingId == save.Id)
+                                {
+                                    <button class="btn btn-primary btn-sm" @onclick="() => ConfirmRename(save)">✓</button>
+                                    <button class="btn btn-secondary btn-sm" @onclick="CancelRename">✕</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-secondary btn-sm" @onclick="() => StartRename(save)" title="Rename">✏️</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteSave(save)" title="Delete">🗑️</button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" @onclick="CloseManageModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Toast ── *@
+@if (_toastVisible)
+{
+    <div class="toast-notification @(_toastVisible ? "show" : "")">
+        ✅ @_toastMessage
+    </div>
+}
+
+@code {
+    private bool _gridReady;
+    private int _rows;
+    private int _cols;
+    private int _inputRows = 20;
+    private int _inputCols = 30;
+    private string?[,] _grid = new string?[0, 0];
+    private readonly Stack<string?[,]> _undoStack = new();
+
+    // Toast
+    private bool _toastVisible;
+    private string _toastMessage = "";
+
+    private async Task ShowToast(string message)
+    {
+        _toastMessage = message;
+        _toastVisible = true;
+        StateHasChanged();
+        await Task.Delay(2500);
+        _toastVisible = false;
+        StateHasChanged();
+    }
+
+    // Save modal
+    private bool _saveModalVisible;
+    private string _saveName = "";
+    private string _saveType = "Pattern";
+    private string _saveError = "";
+
+    // Load modal
+    private bool _loadModalVisible;
+    private List<SaveEntry> _saves = [];
+    private SaveEntry? _loadedSave;
+
+    // Manage modal
+    private bool _manageModalVisible;
+    private string? _editingId;
+    private string _editingName = "";
+
+    private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var savedRows = await JS.InvokeAsync<string?>("liteBrite.getItem", "lb-rows");
+            var savedCols = await JS.InvokeAsync<string?>("liteBrite.getItem", "lb-cols");
+
+            if (int.TryParse(savedRows, out int r) && r >= 2) _inputRows = r;
+            if (int.TryParse(savedCols, out int c) && c >= 2) _inputCols = c;
+
+            StateHasChanged();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        State.OnChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged()
+    {
+        _svgCache.Clear();
+        StateHasChanged();
+    }
+
+    private async Task StartGrid()
+    {
+        _rows = Math.Clamp(_inputRows, 2, 80);
+        _cols = Math.Clamp(_inputCols, 2, 120);
+        _grid = new string?[_rows, _cols];
+        _gridReady = true;
+
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-rows", _rows.ToString());
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-cols", _cols.ToString());
+    }
+
+    private void PaintCell(int row, int col)
+    {
+        PushUndo();
+        if (State.IsStampMode && State.SelectedSquare != null)
+        {
+            var stampVal = $"stamp:{State.SelectedSquare.Id}";
+            _grid[row, col] = _grid[row, col] == stampVal ? null : stampVal;
+        }
+        else
+        {
+            _grid[row, col] = _grid[row, col] == State.SelectedColor ? null : State.SelectedColor;
+        }
+    }
+
+    private void PushUndo()
+    {
+        var snapshot = (string?[,])_grid.Clone();
+        _undoStack.Push(snapshot);
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        _grid = _undoStack.Pop();
+    }
+
+    private readonly Dictionary<string, string> _svgCache = new();
+
+    private string GetCellStyle(string? cellValue)
+    {
+        if (cellValue == null) return "";
+        if (cellValue.StartsWith("stamp:"))
+        {
+            var id = cellValue[6..];
+            var square = State.Squares.FirstOrDefault(s => s.Id == id);
+            if (square == null) return "";
+            if (!_svgCache.TryGetValue(id, out var url))
+                _svgCache[id] = url = SvgHelper.ToDataUrl(square);
+            return $"background-image: url('{url}'); background-size: cover; background-position: center;";
+        }
+        return $"background-color:{cellValue}; box-shadow: 0 0 8px 2px {cellValue}, 0 0 2px 1px {cellValue};";
+    }
+
+    private static bool IsCellLit(string? cellValue) => cellValue != null;
+
+    private IEnumerable<(ColorEntry color, int count)> GetColorCounts()
+    {
+        var counts = State.Colors.ToDictionary(c => c.Hex, _ => 0, StringComparer.OrdinalIgnoreCase);
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+            {
+                var v = _grid[r, c];
+                if (v != null && !v.StartsWith("stamp:") && counts.ContainsKey(v))
+                    counts[v]++;
+            }
+        return State.Colors.Select(c => (c, counts.TryGetValue(c.Hex, out var n) ? n : 0));
+    }
+
+    private void ClearGrid()
+    {
+        _grid = new string?[_rows, _cols];
+        _undoStack.Clear();
+        _loadedSave = null;
+    }
+
+    private void ResetGrid()
+    {
+        _gridReady = false;
+        _grid = new string?[0, 0];
+        _undoStack.Clear();
+        _loadedSave = null;
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+
+    private void OpenSaveModal()
+    {
+        _saveName = "";
+        _saveType = "Pattern";
+        _saveError = "";
+        _saveModalVisible = true;
+    }
+
+    private void CloseSaveModal() => _saveModalVisible = false;
+
+    private async Task OnSaveKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ExecuteSave();
+        if (e.Key == "Escape") CloseSaveModal();
+    }
+
+    private async Task ExecuteSave()
+    {
+        _saveName = _saveName.Trim();
+        if (string.IsNullOrEmpty(_saveName))
+        {
+            _saveError = "Please enter a name.";
+            return;
+        }
+
+        if (_saveType == "Square" && _rows != _cols)
+        {
+            _saveError = $"A Square must have equal rows and columns (current: {_rows} × {_cols}).";
+            return;
+        }
+
+        var cells = new string[_rows * _cols];
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+                cells[r * _cols + c] = _grid[r, c] ?? "";
+
+        var entry = new SaveEntry(
+            Id: Guid.NewGuid().ToString("N")[..12],
+            Name: _saveName,
+            Type: _saveType,
+            Rows: _rows,
+            Cols: _cols,
+            Cells: cells,
+            SavedAt: DateTime.UtcNow.ToString("o")
+        );
+
+        await LoadSavesFromStorage();
+        // Replace existing entry with same name+type, otherwise append
+        var existing = _saves.FindIndex(s => s.Name == entry.Name && s.Type == entry.Type);
+        if (existing >= 0) _saves[existing] = entry;
+        else _saves.Add(entry);
+
+        await PersistSaves();
+        State.UpdateSaves(_saves);
+        _loadedSave = entry;
+        _saveModalVisible = false;
+        await ShowToast($"'{entry.Name}' saved as {entry.Type}.");
+    }
+
+    // ── Load ──────────────────────────────────────────────────────────────────
+
+    private async Task OpenLoadModal()
+    {
+        await LoadSavesFromStorage();
+        _loadModalVisible = true;
+    }
+
+    private void CloseLoadModal() => _loadModalVisible = false;
+
+    private void ExecuteLoad(SaveEntry save)
+    {
+        _rows = save.Rows;
+        _cols = save.Cols;
+        _grid = new string?[_rows, _cols];
+
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+            {
+                var val = save.Cells[r * _cols + c];
+                _grid[r, c] = string.IsNullOrEmpty(val) ? null : val;
+            }
+
+        _loadedSave = save;
+        _gridReady = true;
+        _undoStack.Clear();
+        _loadModalVisible = false;
+    }
+
+    private async Task ExecuteUpdate()
+    {
+        if (_loadedSave == null) return;
+
+        var cells = new string[_rows * _cols];
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+                cells[r * _cols + c] = _grid[r, c] ?? "";
+
+        var updated = _loadedSave with { Rows = _rows, Cols = _cols, Cells = cells, SavedAt = DateTime.UtcNow.ToString("o") };
+
+        await LoadSavesFromStorage();
+        var idx = _saves.FindIndex(s => s.Id == updated.Id);
+        if (idx >= 0) _saves[idx] = updated;
+        else _saves.Add(updated);
+
+        _loadedSave = updated;
+        await PersistSaves();
+        State.UpdateSaves(_saves);
+        await ShowToast($"'{updated.Name}' updated.");
+    }
+
+    private async Task DeleteSave(SaveEntry save)
+    {
+        _saves.Remove(save);
+        if (_loadedSave?.Id == save.Id) _loadedSave = null;
+        await PersistSaves();
+        State.UpdateSaves(_saves);
+    }
+
+    // ── Manage ────────────────────────────────────────────────────────────────
+
+    private async Task OpenManageModal()
+    {
+        await LoadSavesFromStorage();
+        _editingId = null;
+        _manageModalVisible = true;
+    }
+
+    private void CloseManageModal()
+    {
+        _editingId = null;
+        _manageModalVisible = false;
+    }
+
+    private void StartRename(SaveEntry save)
+    {
+        _editingId = save.Id;
+        _editingName = save.Name;
+    }
+
+    private void CancelRename() => _editingId = null;
+
+    private async Task ConfirmRename(SaveEntry save)
+    {
+        var newName = _editingName.Trim();
+        if (string.IsNullOrEmpty(newName)) return;
+
+        var renamed = save with { Name = newName };
+        var idx = _saves.FindIndex(s => s.Id == save.Id);
+        if (idx >= 0) _saves[idx] = renamed;
+
+        if (_loadedSave?.Id == save.Id) _loadedSave = renamed;
+
+        _editingId = null;
+        await PersistSaves();
+        State.UpdateSaves(_saves);
+    }
+
+    private async Task OnRenameKeyDown(KeyboardEventArgs e, SaveEntry save)
+    {
+        if (e.Key == "Enter") await ConfirmRename(save);
+        if (e.Key == "Escape") CancelRename();
+    }
+
+    // ── Storage helpers ───────────────────────────────────────────────────────
+
+    private async Task LoadSavesFromStorage()
+    {
+        var json = await JS.InvokeAsync<string?>("liteBrite.getItem", "lb-saves");
+        if (!string.IsNullOrEmpty(json))
+            _saves = JsonSerializer.Deserialize<List<SaveEntry>>(json, _jsonOpts) ?? [];
+        else
+            _saves = [];
+    }
+
+    private async Task PersistSaves()
+    {
+        var json = JsonSerializer.Serialize(_saves, _jsonOpts);
+        await JS.InvokeVoidAsync("liteBrite.setItem", "lb-saves", json);
+    }
+
+    public void Dispose()
+    {
+        State.OnChanged -= OnStateChanged;
+    }
+}
+
+
