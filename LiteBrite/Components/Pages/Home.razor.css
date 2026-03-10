@@ -506,8 +506,8 @@
 
 .lb-cell.in-selected-row:not(.lit),
 .lb-cell.in-selected-col:not(.lit) {
-    background-color: rgba(255, 204, 0, 0.07) !important;
-    border-color: rgba(255, 204, 0, 0.3) !important;
+    background-color: #1e1a08 !important;
+    border-color: rgba(255, 204, 0, 0.4) !important;
 }
 
 .lb-cell.lit.in-selected-row,
