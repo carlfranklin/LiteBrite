@@ -350,6 +350,18 @@ else
     protected override void OnInitialized()
     {
         State.OnChanged += OnStateChanged;
+        State.OnReplaceColorRequested += ReplaceColorInGrid;
+    }
+
+    private void ReplaceColorInGrid(string fromHex, string toHex)
+    {
+        if (!_gridReady) return;
+        PushUndo();
+        for (int r = 0; r < _rows; r++)
+            for (int c = 0; c < _cols; c++)
+                if (_grid[r, c] == fromHex)
+                    _grid[r, c] = toHex;
+        StateHasChanged();
     }
 
     private void OnStateChanged()
@@ -851,6 +863,7 @@ else
     public async ValueTask DisposeAsync()
     {
         State.OnChanged -= OnStateChanged;
+        State.OnReplaceColorRequested -= ReplaceColorInGrid;
         _dotNetRef?.Dispose();
         try
         {

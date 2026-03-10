@@ -10,6 +10,7 @@ public class LiteBriteState
     public List<ColorEntry> Colors { get; private set; } = DefaultColors();
 
     public event Action? OnChanged;
+    public event Action<string, string>? OnReplaceColorRequested;
 
     public static List<ColorEntry> DefaultColors() =>
     [
@@ -53,4 +54,7 @@ public class LiteBriteState
 
     public bool IsColorUsed(string hex) =>
         AllSaves.Any(save => save.Cells.Any(c => c == hex));
+
+    public void RequestReplaceColor(string fromHex, string toHex) =>
+        OnReplaceColorRequested?.Invoke(fromHex, toHex);
 }

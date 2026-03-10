@@ -71,6 +71,11 @@
     border-color: #f66;
 }
 
+.btn-icon-replace:not(:disabled):hover {
+    color: #7df;
+    border-color: #7df;
+}
+
 .nav-icon {
     width: 0.8rem;
     height: 0.8rem;
@@ -284,5 +289,51 @@
     border: 1px solid #444;
     border-radius: 6px;
     padding: 0.3rem 0.6rem;
+}
+
+/* ── Replace Color Modal ── */
+.replace-color-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.replace-swatch {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: 2px solid rgba(255,255,255,0.3);
+    flex-shrink: 0;
+}
+
+.replace-name {
+    color: white;
+    font-size: 0.95rem;
+}
+
+.replace-target-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.replace-target-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    padding: 0;
+}
+
+.replace-target-swatch:hover {
+    border-color: rgba(255,255,255,0.6);
+}
+
+.replace-target-swatch.selected {
+    border-color: white;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.4);
 }
 

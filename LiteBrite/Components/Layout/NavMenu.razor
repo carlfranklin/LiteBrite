@@ -30,6 +30,12 @@
                         @onclick="() => State.SelectColor(color.Hex)">
                     <span class="color-name">@color.Name</span>
                 </button>
+                <button class="btn-icon btn-icon-replace"
+                        title="Replace @color.Name in grid"
+                        @onclick="() => OpenReplaceColorModal(color)"
+                        @onclick:stopPropagation>
+                    <Blazicon Svg="FontAwesomeSolidIcon.ArrowsRotate" class="nav-icon" />
+                </button>
                 <button class="btn-icon btn-icon-danger"
                         title="@(State.IsColorUsed(color.Hex) ? "In use — cannot delete" : "Delete color")"
                         disabled="@State.IsColorUsed(color.Hex)"
@@ -92,6 +98,51 @@
     </div>
 }
 
+@* ── Replace Color Modal ── *@
+@if (_replaceColorVisible && _replaceFromColor != null)
+{
+    <div class="modal-backdrop" @onclick="CloseReplaceColorModal">
+        <div class="modal-card" @onclick:stopPropagation>
+            <h3 class="modal-title">Replace Color</h3>
+            <div class="modal-field">
+                <label>Replace</label>
+                <div class="replace-color-preview">
+                    <span class="replace-swatch" style="background:@_replaceFromColor.Hex;"></span>
+                    <span class="replace-name">@_replaceFromColor.Name</span>
+                </div>
+            </div>
+            <div class="modal-field">
+                <label>With</label>
+                <div class="replace-target-picker">
+                    @foreach (var color in State.Colors.Where(c => c.Hex != _replaceFromColor.Hex))
+                    {
+                        <button class="replace-target-swatch @(_replaceToHex == color.Hex ? "selected" : "")"
+                                style="background:@color.Hex;"
+                                title="@color.Name"
+                                @onclick="() => _replaceToHex = color.Hex">
+                        </button>
+                    }
+                </div>
+                @if (_replaceToHex != null)
+                {
+                    var toColor = State.Colors.FirstOrDefault(c => c.Hex == _replaceToHex);
+                    <div class="replace-color-preview" style="margin-top:0.4rem;">
+                        <span class="replace-swatch" style="background:@_replaceToHex;"></span>
+                        <span class="replace-name">@toColor?.Name</span>
+                    </div>
+                }
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" @onclick="CloseReplaceColorModal">Cancel</button>
+                <button class="btn btn-primary btn-sm"
+                        disabled="@(_replaceToHex == null)"
+                        @onclick="ExecuteReplaceColor">Replace</button>
+            </div>
+        </div>
+    </div>
+}
+
+
 @code {
     private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
 
@@ -100,6 +151,11 @@
     private string _newColorHex = "#ff0000";
     private string _newColorName = "";
     private string _addColorError = "";
+
+    // Replace-color modal
+    private bool _replaceColorVisible;
+    private ColorEntry? _replaceFromColor;
+    private string? _replaceToHex;
 
     protected override void OnInitialized()
     {
@@ -180,6 +236,27 @@
     {
         var json = JsonSerializer.Serialize(colors, _jsonOpts);
         await JS.InvokeVoidAsync("liteBrite.setItem", "lb-colors", json);
+    }
+
+    private void OpenReplaceColorModal(ColorEntry color)
+    {
+        _replaceFromColor = color;
+        _replaceToHex = null;
+        _replaceColorVisible = true;
+    }
+
+    private void CloseReplaceColorModal()
+    {
+        _replaceColorVisible = false;
+        _replaceFromColor = null;
+        _replaceToHex = null;
+    }
+
+    private void ExecuteReplaceColor()
+    {
+        if (_replaceFromColor == null || _replaceToHex == null) return;
+        State.RequestReplaceColor(_replaceFromColor.Hex, _replaceToHex);
+        CloseReplaceColorModal();
     }
 
     public void Dispose()
