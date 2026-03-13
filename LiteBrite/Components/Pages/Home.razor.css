@@ -284,6 +284,10 @@
     margin-top: 0.25rem;
 }
 
+.modal-actions-3 {
+    justify-content: space-between;
+}
+
 .btn-modal-cancel {
     padding: 0.45rem 1.1rem;
     background: transparent;
@@ -517,6 +521,87 @@
 
 .lb-cell.anchor-cell {
     box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55) !important;
+}
+
+/* ── Triangle cells ── */
+.lb-tri-cell {
+    position: relative;
+    overflow: hidden;
+    cursor: default;
+    background-color: #111;
+}
+
+/* Suppress default square hover since individual triangles handle it */
+.lb-tri-cell:hover {
+    background-color: #111;
+}
+
+.lb-tri {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    background-color: #111;
+    transition: background-color 0.1s;
+}
+
+.lb-tri::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    transition: background 0.1s;
+    pointer-events: none;
+}
+
+.lb-tri:hover::after {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.lb-tri-top    { clip-path: polygon(0% 0%, 100% 0%, 50% 50%); }
+.lb-tri-right  { clip-path: polygon(100% 0%, 100% 100%, 50% 50%); }
+.lb-tri-bottom { clip-path: polygon(100% 100%, 0% 100%, 50% 50%); }
+.lb-tri-left   { clip-path: polygon(0% 100%, 0% 0%, 50% 50%); }
+
+/* Thin X divider lines between the four triangles */
+.lb-tri-dividers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background-image:
+        linear-gradient(to bottom right, transparent calc(50% - 0.5px), rgba(255,255,255,0.25) 50%, transparent calc(50% + 0.5px)),
+        linear-gradient(to bottom left,  transparent calc(50% - 0.5px), rgba(255,255,255,0.25) 50%, transparent calc(50% + 0.5px));
+}
+
+/* Selection overlay for triangle cells (replaces background approach) */
+.lb-tri-cell.in-selected-row::before,
+.lb-tri-cell.in-selected-col::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 204, 0, 0.10);
+    border-color: rgba(255, 204, 0, 0.4) !important;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Override the standard selection background on tri-cells (triangles cover it) */
+.lb-tri-cell.in-selected-row:not(.lit),
+.lb-tri-cell.in-selected-col:not(.lit) {
+    background-color: #111 !important;
+}
+
+/* Anchor highlight for triangle cells */
+.lb-tri-cell.anchor-cell {
+    box-shadow: none !important;
+}
+.lb-tri-cell.anchor-cell::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+    z-index: 10;
 }
 
 /* Row / column context menu */

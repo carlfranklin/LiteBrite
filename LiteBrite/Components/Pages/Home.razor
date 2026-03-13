@@ -20,6 +20,22 @@
                 <label for="colsInput">Columns</label>
                 <input id="colsInput" type="number" min="2" max="120" @bind="_inputCols" />
             </div>
+            @if (!_isResizing)
+            {
+                <div class="setup-field">
+                    <label>Cell Style</label>
+                    <div class="type-options">
+                        <label class="type-option @(_inputMode == "Squares" ? "selected" : "")">
+                            <input type="radio" name="cellMode" value="Squares" @onchange='() => _inputMode = "Squares"' checked="@(_inputMode == "Squares")" />
+                            ⬛ Squares
+                        </label>
+                        <label class="type-option @(_inputMode == "Triangles" ? "selected" : "")">
+                            <input type="radio" name="cellMode" value="Triangles" @onchange='() => _inputMode = "Triangles"' checked="@(_inputMode == "Triangles")" />
+                            ◪ Triangles
+                        </label>
+                    </div>
+                </div>
+            }
             @if (_isResizing)
             {
                 <button class="btn btn-primary btn-sm btn-start" @onclick="ResizeGrid">Resize Grid</button>
@@ -40,10 +56,11 @@ else
         <div class="grid-toolbar">
             <span class="grid-title">@(_loadedSave?.Name ?? "Untitled")</span>
             <div class="toolbar-sep"></div>
+            <button class="btn btn-secondary btn-sm" @onclick="OnNewGridClicked" title="Start a new grid">✦ New</button>
             <button class="btn btn-primary btn-sm" @onclick="ClearGrid" title="Clear all pegs">Clear</button>
             <button class="btn btn-primary btn-sm" @onclick="Undo"
                     title="Undo last paint"
-                    disabled="@(_undoStack.Count == 0)">↩ Undo</button>
+                    disabled="@(ActiveUndoCount == 0)">↩ Undo</button>
             <button class="btn btn-primary btn-sm" @onclick="ResetGrid" title="Change grid size">Change Size</button>
             <div class="toolbar-sep"></div>
             <button class="btn btn-primary btn-sm" @onclick="OpenSaveModal">💾 Save…</button>
@@ -79,13 +96,29 @@ else
                         @for (int c = 0; c < _cols; c++)
                         {
                             int col = c;
-                            string? cellValue = _grid[row, col];
-                            <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "") @(row == _anchorRow && col == _anchorCol ? "anchor-cell" : "")"
-                                 style="@GetCellStyle(cellValue)"
-                                 @onclick="(e) => PaintCell(row, col, e.ShiftKey)"
-                                 @oncontextmenu="(e) => ShowContextMenu(row, col, e)"
-                                 @oncontextmenu:preventDefault="true">
-                            </div>
+                            @if (_gridMode == "Triangles")
+                            {
+                                var tc = _triGrid[row, col];
+                                <div class="lb-cell lb-tri-cell @(IsTriCellLit(row, col) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "") @(row == _anchorRow && col == _anchorCol ? "anchor-cell" : "")"
+                                     @oncontextmenu="(e) => ShowContextMenu(row, col, e)"
+                                     @oncontextmenu:preventDefault="true">
+                                    <div class="lb-tri lb-tri-top"    style="@GetTriStyle(tc.Top)"    @onclick="(e) => PaintTriangle(row, col, 0, e.ShiftKey)"></div>
+                                    <div class="lb-tri lb-tri-right"  style="@GetTriStyle(tc.Right)"  @onclick="(e) => PaintTriangle(row, col, 1, e.ShiftKey)"></div>
+                                    <div class="lb-tri lb-tri-bottom" style="@GetTriStyle(tc.Bottom)" @onclick="(e) => PaintTriangle(row, col, 2, e.ShiftKey)"></div>
+                                    <div class="lb-tri lb-tri-left"   style="@GetTriStyle(tc.Left)"   @onclick="(e) => PaintTriangle(row, col, 3, e.ShiftKey)"></div>
+                                    <div class="lb-tri-dividers"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                string? cellValue = _grid[row, col];
+                                <div class="lb-cell @(IsCellLit(cellValue) ? "lit" : "") @(row == _selectedRow ? "in-selected-row" : "") @(col == _selectedCol ? "in-selected-col" : "") @(row == _anchorRow && col == _anchorCol ? "anchor-cell" : "")"
+                                     style="@GetCellStyle(cellValue)"
+                                     @onclick="(e) => PaintCell(row, col, e.ShiftKey)"
+                                     @oncontextmenu="(e) => ShowContextMenu(row, col, e)"
+                                     @oncontextmenu:preventDefault="true">
+                                </div>
+                            }
                         }
                     }
                 </div>
@@ -273,6 +306,22 @@ else
     </div>
 }
 
+@* ── Save Changes? modal ── *@
+@if (_newGridModalVisible)
+{
+    <div class="modal-backdrop" @onclick="OnSaveChangesCancel">
+        <div class="modal-card" @onclick:stopPropagation>
+            <h3 class="modal-title">Save Changes?</h3>
+            <p class="modal-empty">Your current design has unsaved changes.</p>
+            <div class="modal-actions modal-actions-3">
+                <button class="btn btn-secondary btn-sm" @onclick="OnSaveChangesCancel">Cancel</button>
+                <button class="btn btn-danger btn-sm" @onclick="OnSaveChangesDontSave">Don't Save</button>
+                <button class="btn btn-primary btn-sm" @onclick="OnSaveChangesSave">💾 Save</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool _gridReady;
     private bool _isResizing;
@@ -280,8 +329,17 @@ else
     private int _cols;
     private int _inputRows = 20;
     private int _inputCols = 30;
+    private string _gridMode = "Squares";
+    private string _inputMode = "Squares";
     private string?[,] _grid = new string?[0, 0];
+    private TriangleCell[,] _triGrid = new TriangleCell[0, 0];
     private readonly Stack<string?[,]> _undoStack = new();
+    private readonly Stack<TriangleCell[,]> _triUndoStack = new();
+    private bool _hasUnsavedChanges;
+
+    // New-grid / save-changes flow
+    private bool _newGridModalVisible;
+    private bool _pendingNewGrid;
 
     // Row/column selection (set by right-click; persists for keyboard shortcuts)
     private int? _selectedRow;
@@ -357,10 +415,27 @@ else
     {
         if (!_gridReady) return;
         PushUndo();
-        for (int r = 0; r < _rows; r++)
-            for (int c = 0; c < _cols; c++)
-                if (_grid[r, c] == fromHex)
-                    _grid[r, c] = toHex;
+        if (_gridMode == "Triangles")
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var tc = _triGrid[r, c];
+                    _triGrid[r, c] = new TriangleCell(
+                        tc.Top    == fromHex ? toHex : tc.Top,
+                        tc.Right  == fromHex ? toHex : tc.Right,
+                        tc.Bottom == fromHex ? toHex : tc.Bottom,
+                        tc.Left   == fromHex ? toHex : tc.Left
+                    );
+                }
+        }
+        else
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                    if (_grid[r, c] == fromHex)
+                        _grid[r, c] = toHex;
+        }
         StateHasChanged();
     }
 
@@ -374,7 +449,17 @@ else
     {
         _rows = Math.Clamp(_inputRows, 2, 80);
         _cols = Math.Clamp(_inputCols, 2, 120);
+        _gridMode = _inputMode;
         _grid = new string?[_rows, _cols];
+        _triGrid = NewTriGrid(_rows, _cols);
+        _undoStack.Clear();
+        _triUndoStack.Clear();
+        _hasUnsavedChanges = false;
+        _loadedSave = null;
+        _anchorRow = null;
+        _anchorCol = null;
+        _selectedRow = null;
+        _selectedCol = null;
         _gridReady = true;
 
         await JS.InvokeVoidAsync("liteBrite.setItem", "lb-rows", _rows.ToString());
@@ -414,14 +499,25 @@ else
 
     private void PushUndo()
     {
-        var snapshot = (string?[,])_grid.Clone();
-        _undoStack.Push(snapshot);
+        _hasUnsavedChanges = true;
+        if (_gridMode == "Triangles")
+            _triUndoStack.Push((TriangleCell[,])_triGrid.Clone());
+        else
+            _undoStack.Push((string?[,])_grid.Clone());
     }
 
     private void Undo()
     {
-        if (_undoStack.Count == 0) return;
-        _grid = _undoStack.Pop();
+        if (_gridMode == "Triangles")
+        {
+            if (_triUndoStack.Count == 0) return;
+            _triGrid = _triUndoStack.Pop();
+        }
+        else
+        {
+            if (_undoStack.Count == 0) return;
+            _grid = _undoStack.Pop();
+        }
     }
 
     private readonly Dictionary<string, string> _svgCache = new();
@@ -441,6 +537,46 @@ else
 
     private static bool IsCellLit(string? cellValue) => cellValue != null;
 
+    private bool IsTriCellLit(int row, int col) => !_triGrid[row, col].IsEmpty;
+
+    private string GetTriStyle(string? color) =>
+        color == null ? "" : $"background-color:{color};";
+
+    private int ActiveUndoCount => _gridMode == "Triangles" ? _triUndoStack.Count : _undoStack.Count;
+
+    private static TriangleCell[,] NewTriGrid(int rows, int cols)
+    {
+        var g = new TriangleCell[rows, cols];
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                g[r, c] = TriangleCell.Empty;
+        return g;
+    }
+
+    private void PaintTriangle(int row, int col, int triIndex, bool shift = false)
+    {
+        if (shift && _anchorRow.HasValue && _anchorCol.HasValue)
+        {
+            PushUndo();
+            int r0 = Math.Min(_anchorRow.Value, row), r1 = Math.Max(_anchorRow.Value, row);
+            int c0 = Math.Min(_anchorCol.Value, col), c1 = Math.Max(_anchorCol.Value, col);
+            for (int r = r0; r <= r1; r++)
+                for (int c = c0; c <= c1; c++)
+                    _triGrid[r, c] = _triGrid[r, c].WithIndex(triIndex, State.SelectedColor);
+            _anchorRow = row;
+            _anchorCol = col;
+        }
+        else
+        {
+            PushUndo();
+            var current = _triGrid[row, col].GetIndex(triIndex);
+            var newColor = current == State.SelectedColor ? null : State.SelectedColor;
+            _triGrid[row, col] = _triGrid[row, col].WithIndex(triIndex, newColor);
+            _anchorRow = row;
+            _anchorCol = col;
+        }
+    }
+
     private string GetSquareDataUrl(SaveEntry square)
     {
         if (!_svgCache.TryGetValue(square.Id, out var url))
@@ -451,13 +587,27 @@ else
     private IEnumerable<(ColorEntry color, int count)> GetColorCounts()
     {
         var counts = State.Colors.ToDictionary(c => c.Hex, _ => 0, StringComparer.OrdinalIgnoreCase);
-        for (int r = 0; r < _rows; r++)
-            for (int c = 0; c < _cols; c++)
-            {
-                var v = _grid[r, c];
-                if (v != null && !v.StartsWith("stamp:") && counts.ContainsKey(v))
-                    counts[v]++;
-            }
+        if (_gridMode == "Triangles")
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var tc = _triGrid[r, c];
+                    foreach (var color in new[] { tc.Top, tc.Right, tc.Bottom, tc.Left })
+                        if (color != null && counts.ContainsKey(color))
+                            counts[color]++;
+                }
+        }
+        else
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var v = _grid[r, c];
+                    if (v != null && !v.StartsWith("stamp:") && counts.ContainsKey(v))
+                        counts[v]++;
+                }
+        }
         return State.Colors.Select(c => (c, counts.TryGetValue(c.Hex, out var n) ? n : 0));
     }
 
@@ -480,7 +630,10 @@ else
     private void ClearGrid()
     {
         _grid = new string?[_rows, _cols];
+        _triGrid = NewTriGrid(_rows, _cols);
         _undoStack.Clear();
+        _triUndoStack.Clear();
+        _hasUnsavedChanges = false;
         _loadedSave = null;
         _anchorRow = null;
         _anchorCol = null;
@@ -496,20 +649,74 @@ else
         _gridReady = false;
     }
 
+    // ── New Grid / Save-Changes flow ──────────────────────────────────────────
+
+    private void GoToSetupForNew()
+    {
+        _isResizing = false;
+        _inputRows = _rows > 0 ? _rows : 20;
+        _inputCols = _cols > 0 ? _cols : 30;
+        _inputMode = _gridMode;
+        _newGridModalVisible = false;
+        _gridReady = false;
+    }
+
+    private void OnNewGridClicked()
+    {
+        if (_hasUnsavedChanges)
+            _newGridModalVisible = true;
+        else
+            GoToSetupForNew();
+    }
+
+    private async Task OnSaveChangesSave()
+    {
+        _newGridModalVisible = false;
+        if (_loadedSave != null)
+        {
+            await ExecuteUpdate();
+            GoToSetupForNew();
+        }
+        else
+        {
+            _pendingNewGrid = true;
+            OpenSaveModal();
+        }
+    }
+
+    private void OnSaveChangesDontSave()
+    {
+        _hasUnsavedChanges = false;
+        _newGridModalVisible = false;
+        GoToSetupForNew();
+    }
+
+    private void OnSaveChangesCancel()
+    {
+        _pendingNewGrid = false;
+        _newGridModalVisible = false;
+    }
+
     private async Task ResizeGrid()
     {
         var newRows = Math.Clamp(_inputRows, 2, 80);
         var newCols = Math.Clamp(_inputCols, 2, 120);
         var newGrid = new string?[newRows, newCols];
+        var newTriGrid = NewTriGrid(newRows, newCols);
 
         for (int r = 0; r < Math.Min(_rows, newRows); r++)
             for (int c = 0; c < Math.Min(_cols, newCols); c++)
+            {
                 newGrid[r, c] = _grid[r, c];
+                newTriGrid[r, c] = _triGrid[r, c];
+            }
 
         _rows = newRows;
         _cols = newCols;
         _grid = newGrid;
+        _triGrid = newTriGrid;
         _undoStack.Clear();
+        _triUndoStack.Clear();
         _anchorRow = null;
         _anchorCol = null;
         _isResizing = false;
@@ -548,50 +755,58 @@ else
     {
         if (_rows >= 80) return;
         var ng = new string?[_rows + 1, _cols];
+        var ntg = NewTriGrid(_rows + 1, _cols);
         for (int r = 0; r < atRow; r++)
-            for (int c = 0; c < _cols; c++) ng[r, c] = _grid[r, c];
+            for (int c = 0; c < _cols; c++) { ng[r, c] = _grid[r, c]; ntg[r, c] = _triGrid[r, c]; }
         for (int r = atRow; r < _rows; r++)
-            for (int c = 0; c < _cols; c++) ng[r + 1, c] = _grid[r, c];
+            for (int c = 0; c < _cols; c++) { ng[r + 1, c] = _grid[r, c]; ntg[r + 1, c] = _triGrid[r, c]; }
         _rows++;
         _grid = ng;
+        _triGrid = ntg;
     }
 
     private void DeleteRowAt(int atRow)
     {
         if (_rows <= 2) return;
         var ng = new string?[_rows - 1, _cols];
+        var ntg = NewTriGrid(_rows - 1, _cols);
         for (int r = 0; r < atRow; r++)
-            for (int c = 0; c < _cols; c++) ng[r, c] = _grid[r, c];
+            for (int c = 0; c < _cols; c++) { ng[r, c] = _grid[r, c]; ntg[r, c] = _triGrid[r, c]; }
         for (int r = atRow + 1; r < _rows; r++)
-            for (int c = 0; c < _cols; c++) ng[r - 1, c] = _grid[r, c];
+            for (int c = 0; c < _cols; c++) { ng[r - 1, c] = _grid[r, c]; ntg[r - 1, c] = _triGrid[r, c]; }
         _rows--;
         _grid = ng;
+        _triGrid = ntg;
     }
 
     private void InsertColAt(int atCol)
     {
         if (_cols >= 120) return;
         var ng = new string?[_rows, _cols + 1];
+        var ntg = NewTriGrid(_rows, _cols + 1);
         for (int r = 0; r < _rows; r++)
         {
-            for (int c = 0; c < atCol; c++) ng[r, c] = _grid[r, c];
-            for (int c = atCol; c < _cols; c++) ng[r, c + 1] = _grid[r, c];
+            for (int c = 0; c < atCol; c++) { ng[r, c] = _grid[r, c]; ntg[r, c] = _triGrid[r, c]; }
+            for (int c = atCol; c < _cols; c++) { ng[r, c + 1] = _grid[r, c]; ntg[r, c + 1] = _triGrid[r, c]; }
         }
         _cols++;
         _grid = ng;
+        _triGrid = ntg;
     }
 
     private void DeleteColAt(int atCol)
     {
         if (_cols <= 2) return;
         var ng = new string?[_rows, _cols - 1];
+        var ntg = NewTriGrid(_rows, _cols - 1);
         for (int r = 0; r < _rows; r++)
         {
-            for (int c = 0; c < atCol; c++) ng[r, c] = _grid[r, c];
-            for (int c = atCol + 1; c < _cols; c++) ng[r, c - 1] = _grid[r, c];
+            for (int c = 0; c < atCol; c++) { ng[r, c] = _grid[r, c]; ntg[r, c] = _triGrid[r, c]; }
+            for (int c = atCol + 1; c < _cols; c++) { ng[r, c - 1] = _grid[r, c]; ntg[r, c - 1] = _triGrid[r, c]; }
         }
         _cols--;
         _grid = ng;
+        _triGrid = ntg;
     }
 
     // Toolbar button handlers
@@ -673,7 +888,7 @@ else
     private void OpenSaveModal()
     {
         _saveName = "";
-        _saveType = "Pattern";
+        _saveType = _gridMode == "Triangles" ? "Pattern" : "Pattern";
         _saveError = "";
         _saveModalVisible = true;
     }
@@ -702,9 +917,21 @@ else
         }
 
         var cells = new string[_rows * _cols];
-        for (int r = 0; r < _rows; r++)
-            for (int c = 0; c < _cols; c++)
-                cells[r * _cols + c] = _grid[r, c] ?? "";
+        if (_gridMode == "Triangles")
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var tc = _triGrid[r, c];
+                    cells[r * _cols + c] = tc.IsEmpty ? "" : tc.Serialize();
+                }
+        }
+        else
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                    cells[r * _cols + c] = _grid[r, c] ?? "";
+        }
 
         var entry = new SaveEntry(
             Id: Guid.NewGuid().ToString("N")[..12],
@@ -713,11 +940,11 @@ else
             Rows: _rows,
             Cols: _cols,
             Cells: cells,
-            SavedAt: DateTime.UtcNow.ToString("o")
+            SavedAt: DateTime.UtcNow.ToString("o"),
+            Mode: _gridMode
         );
 
         await LoadSavesFromStorage();
-        // Replace existing entry with same name+type, otherwise append
         var existing = _saves.FindIndex(s => s.Name == entry.Name && s.Type == entry.Type);
         if (existing >= 0) _saves[existing] = entry;
         else _saves.Add(entry);
@@ -725,8 +952,15 @@ else
         await PersistSaves();
         State.UpdateSaves(_saves);
         _loadedSave = entry;
+        _hasUnsavedChanges = false;
         _saveModalVisible = false;
         await ShowToast($"'{entry.Name}' saved as {entry.Type}.");
+
+        if (_pendingNewGrid)
+        {
+            _pendingNewGrid = false;
+            GoToSetupForNew();
+        }
     }
 
     // ── Load ──────────────────────────────────────────────────────────────────
@@ -743,18 +977,39 @@ else
     {
         _rows = save.Rows;
         _cols = save.Cols;
+        _gridMode = save.Mode ?? "Squares";
+        _inputMode = _gridMode;
         _grid = new string?[_rows, _cols];
+        _triGrid = NewTriGrid(_rows, _cols);
 
-        for (int r = 0; r < _rows; r++)
-            for (int c = 0; c < _cols; c++)
-            {
-                var val = save.Cells[r * _cols + c];
-                _grid[r, c] = string.IsNullOrEmpty(val) ? null : val;
-            }
+        if (_gridMode == "Triangles")
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var val = save.Cells[r * _cols + c];
+                    if (!string.IsNullOrEmpty(val))
+                    {
+                        var tc = TriangleCell.TryDeserialize(val);
+                        if (tc != null) _triGrid[r, c] = tc;
+                    }
+                }
+        }
+        else
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var val = save.Cells[r * _cols + c];
+                    _grid[r, c] = string.IsNullOrEmpty(val) ? null : val;
+                }
+        }
 
         _loadedSave = save;
         _gridReady = true;
         _undoStack.Clear();
+        _triUndoStack.Clear();
+        _hasUnsavedChanges = false;
         _anchorRow = null;
         _anchorCol = null;
         _loadModalVisible = false;
@@ -765,11 +1020,23 @@ else
         if (_loadedSave == null) return;
 
         var cells = new string[_rows * _cols];
-        for (int r = 0; r < _rows; r++)
-            for (int c = 0; c < _cols; c++)
-                cells[r * _cols + c] = _grid[r, c] ?? "";
+        if (_gridMode == "Triangles")
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                {
+                    var tc = _triGrid[r, c];
+                    cells[r * _cols + c] = tc.IsEmpty ? "" : tc.Serialize();
+                }
+        }
+        else
+        {
+            for (int r = 0; r < _rows; r++)
+                for (int c = 0; c < _cols; c++)
+                    cells[r * _cols + c] = _grid[r, c] ?? "";
+        }
 
-        var updated = _loadedSave with { Rows = _rows, Cols = _cols, Cells = cells, SavedAt = DateTime.UtcNow.ToString("o") };
+        var updated = _loadedSave with { Rows = _rows, Cols = _cols, Cells = cells, SavedAt = DateTime.UtcNow.ToString("o"), Mode = _gridMode };
 
         await LoadSavesFromStorage();
         var idx = _saves.FindIndex(s => s.Id == updated.Id);
@@ -777,6 +1044,7 @@ else
         else _saves.Add(updated);
 
         _loadedSave = updated;
+        _hasUnsavedChanges = false;
         await PersistSaves();
         State.UpdateSaves(_saves);
         await ShowToast($"'{updated.Name}' updated.");

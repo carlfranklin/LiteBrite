@@ -7,5 +7,6 @@ public record SaveEntry(
     int Rows,
     int Cols,
     string[] Cells,
-    string SavedAt
+    string SavedAt,
+    string Mode = "Squares"
 );
